@@ -1,0 +1,187 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSP Logistics Optimizer</title>
+  <meta name="description" content="AI logistics route optimization using Constraint Satisfaction Problems.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="app">
+  <!-- LEFT PANEL -->
+  <aside class="panel" id="left-panel">
+    <div class="panel-header">
+      <span class="panel-title">Route Config</span>
+    </div>
+    <div class="panel-body">
+      <div id="status-bar">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Click map to set start point</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Coordinates</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div><label>Start Point</label>
+            <div class="coord-display empty" id="start-display">Click on map...</div></div>
+          <div><label>Destination</label>
+            <div class="coord-display empty" id="end-display">Click on map...</div></div>
+          <button class="btn btn-danger btn-sm" id="clear-btn">Clear Points</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Algorithm</div>
+        <div class="algo-grid">
+          <button class="algo-btn csp-algo active" data-algo="csp_full" id="algo-csp_full">CSP Full</button>
+          <button class="algo-btn csp-algo" data-algo="csp_backtrack" id="algo-csp_backtrack">Backtrack</button>
+          <button class="algo-btn csp-algo" data-algo="csp_mrv" id="algo-csp_mrv">MRV+LCV</button>
+          <button class="algo-btn" data-algo="bfs" id="algo-bfs">BFS</button>
+          <button class="algo-btn" data-algo="dfs" id="algo-dfs">DFS</button>
+          <button class="algo-btn" data-algo="greedy" id="algo-greedy">Greedy</button>
+          <button class="algo-btn" data-algo="branch_bound" id="algo-branch_bound">B&amp;B</button>
+        </div>
+        <div style="margin-top:8px;font-size:9px;color:var(--text-3)">
+          <span style="color:var(--neon-m)">&#9632;</span> CSP &nbsp;
+          <span style="color:var(--neon-c)">&#9632;</span> Baseline
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Constraint Limits</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div><label>Max Distance (km)</label>
+            <input type="number" id="cfg-max-km" value="200" min="1" max="5000"></div>
+          <div><label>Max ETA (minutes)</label>
+            <input type="number" id="cfg-max-eta" value="180" min="1" max="600"></div>
+          <div><label>Energy Budget</label>
+            <input type="number" id="cfg-energy" value="100" min="1" max="500"></div>
+          <div><label>OpenWeather API Key (optional)</label>
+            <input type="text" id="weather-api-key" placeholder="Leave blank for simulation"></div>
+        </div>
+      </div>
+      <button class="btn btn-neon" id="solve-btn" disabled>Run CSP Solver</button>
+      <div class="sim-controls">
+        <button class="btn btn-primary" id="sim-btn" disabled style="flex:1">Simulate Delivery</button>
+        <button class="btn btn-danger btn-sm" id="sim-stop-btn" style="width:42px" disabled>&#9632;</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CENTER MAP -->
+  <main id="map-container">
+    <div id="map-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:13px;font-weight:700;color:var(--text-1)">AI Logistics Optimizer</span>
+        <span style="font-size:10px;color:var(--text-3)">Chennai, India</span>
+      </div>
+      <div id="click-mode" class="start-mode">SET START</div>
+    </div>
+    <div id="map"></div>
+    <div id="tooltip"></div>
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loading-text">Running CSP Solver...</div>
+    </div>
+  </main>
+
+  <!-- RIGHT PANEL -->
+  <aside class="panel" id="right-panel">
+    <div class="panel-header">
+      <span class="panel-title">Analytics</span>
+    </div>
+    <div class="panel-body">
+      <div class="card">
+        <div class="card-title">Key Metrics</div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Distance</div>
+            <div class="stat-value green" id="stat-distance">--</div>
+            <div class="stat-unit">km</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">ETA</div>
+            <div class="stat-value" id="stat-eta">--</div>
+            <div class="stat-unit">minutes</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Nodes</div>
+            <div class="stat-value magenta" id="stat-nodes">--</div>
+            <div class="stat-unit">explored</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Checks</div>
+            <div class="stat-value yellow" id="stat-checks">--</div>
+            <div class="stat-unit">constraint</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;display:flex;justify-content:space-between">
+          <div style="font-size:10px;color:var(--text-3)">Algorithm</div>
+          <div style="font-size:11px;font-weight:600;color:var(--neon-m)" id="stat-algo">--</div>
+        </div>
+        <div style="margin-top:4px;display:flex;justify-content:space-between">
+          <div style="font-size:10px;color:var(--text-3)">Time taken</div>
+          <div style="font-size:11px;color:var(--text-2)" id="stat-time">--</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Weather</div>
+        <div class="weather-row">
+          <div class="weather-icon" id="weather-icon">&#127780;</div>
+          <div class="weather-info">
+            <div class="weather-desc" id="weather-desc">--</div>
+            <div class="weather-sub" id="weather-sub">--</div>
+          </div>
+          <div class="weather-factor">
+            <div class="wf-label">Slowdown</div>
+            <div id="weather-factor-val" style="color:var(--neon-y)">x--</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">ETA Comparison (all routes)</div>
+        <div id="chart-container"><canvas id="eta-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Routes</div>
+        <div class="route-legend" id="route-legend">
+          <div style="font-size:11px;color:var(--text-3);text-align:center;padding:10px 0">Solve to see routes</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Constraint Evaluation</div>
+        <div class="constraint-list" id="constraint-list">
+          <div style="font-size:11px;color:var(--text-3);text-align:center;padding:8px 0">Awaiting solve...</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Decision Rationale</div>
+        <div id="rationale-box">Run the solver to see the decision rationale...</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Solver Steps</div>
+        <div class="steps-list" id="steps-list">
+          <div style="font-size:11px;color:var(--text-3);padding:4px 0">No steps yet.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>System Logs</span>
+          <button id="clear-logs-btn" style="padding:2px 8px;font-size:9px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);border-radius:4px;cursor:pointer">Clear</button>
+        </div>
+        <div id="log-container"></div>
+      </div>
+    </div>
+  </aside>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/js/map.js"></script>
+<script src="/js/analytics.js"></script>
+<script src="/js/logs.js"></script>
+<script src="/js/csp.js"></script>
+</body>
+</html>
+<div class="card">
+    <h3>🧠 Why this Algorithm?</h3>
+    <p id="algoReason">-</p>
+</div>
